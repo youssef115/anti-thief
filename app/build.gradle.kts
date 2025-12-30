@@ -65,4 +65,10 @@ dependencies {
 
     // Gson for JSON
     implementation("com.google.code.gson:gson:2.10.1")
+
+    // ZIP encryption
+    implementation("net.lingala.zip4j:zip4j:2.11.5")
+
+    // WorkManager for periodic service checks
+    implementation("androidx.work:work-runtime:2.9.0")
 }

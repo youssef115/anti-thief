@@ -18,12 +18,19 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.work.ExistingPeriodicWorkPolicy;
+import androidx.work.PeriodicWorkRequest;
+import androidx.work.WorkManager;
 
+import com.youssef.anti_thief.config.Config;
+import com.youssef.anti_thief.config.ConfigManager;
 import com.youssef.anti_thief.receiver.AntiTheftDeviceAdmin;
 import com.youssef.anti_thief.service.TrackingService;
+import com.youssef.anti_thief.worker.ServiceKeepAliveWorker;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -34,17 +41,36 @@ public class MainActivity extends AppCompatActivity {
     private Button startButton;
     private Button permissionButton;
     private Button deviceAdminButton;
+    private Button configButton;
+    private Button lockScreenProtectionButton;
     
     private DevicePolicyManager devicePolicyManager;
     private ComponentName adminComponent;
     private Button miuiSettingsButton;
+    
+    private ConfigManager configManager;
+    
+
+    private boolean isLockScreenProtectionEnabled = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        
+
+        Config.init(this);
+        configManager = new ConfigManager(this);
+        
+
+        if (!configManager.isSetupComplete()) {
+            startActivity(new Intent(this, SetupActivity.class));
+            finish();
+            return;
+        }
+        
         setContentView(R.layout.activity_main);
 
-        // Initialize Device Admin
+
         devicePolicyManager = (DevicePolicyManager) getSystemService(DEVICE_POLICY_SERVICE);
         adminComponent = new ComponentName(this, AntiTheftDeviceAdmin.class);
 
@@ -59,6 +85,12 @@ public class MainActivity extends AppCompatActivity {
         
         miuiSettingsButton = findViewById(R.id.miuiSettingsButton);
         miuiSettingsButton.setOnClickListener(v -> openMiuiSettings());
+        
+        configButton = findViewById(R.id.configButton);
+        configButton.setOnClickListener(v -> openSetup());
+        
+        lockScreenProtectionButton = findViewById(R.id.lockScreenProtectionButton);
+        lockScreenProtectionButton.setOnClickListener(v -> toggleLockScreenProtection());
 
         updateUI();
     }
@@ -75,14 +107,17 @@ public class MainActivity extends AppCompatActivity {
         
         startButton.setEnabled(allGranted);
         
-        // Update Device Admin button
+
         if (isDeviceAdmin) {
-            deviceAdminButton.setText("✓ Device Admin Active");
-            deviceAdminButton.setEnabled(false);
+            deviceAdminButton.setText("✓ Device Admin Active (Tap to re-enable)");
+            deviceAdminButton.setEnabled(true); // Allow re-enabling for policy updates
         } else {
             deviceAdminButton.setText("Enable Device Admin (Required for Camera)");
             deviceAdminButton.setEnabled(true);
         }
+        
+
+        updateLockScreenProtectionButton(isDeviceAdmin);
         
         if (allGranted && isDeviceAdmin) {
             statusText.setText("✓ All permissions granted!\n✓ Device Admin active!\nReady to start tracking with camera capture.");
@@ -95,31 +130,109 @@ public class MainActivity extends AppCompatActivity {
             permissionButton.setText("Grant Permissions");
         }
     }
+    
+    private void updateLockScreenProtectionButton(boolean isDeviceAdmin) {
+        if (!isDeviceAdmin) {
+            lockScreenProtectionButton.setText("🔓 Lock Screen Protection (Enable Device Admin first)");
+            lockScreenProtectionButton.setEnabled(false);
+            return;
+        }
+        
+        lockScreenProtectionButton.setEnabled(true);
+        
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            int disabledFeatures = devicePolicyManager.getKeyguardDisabledFeatures(adminComponent);
+            isLockScreenProtectionEnabled = (disabledFeatures & DevicePolicyManager.KEYGUARD_DISABLE_FEATURES_ALL) != 0;
+        }
+        
+        if (isLockScreenProtectionEnabled) {
+            lockScreenProtectionButton.setText("🔒 Lock Screen Protection: ON (Tap to disable)");
+        } else {
+            lockScreenProtectionButton.setText("🔓 Lock Screen Protection: OFF (Tap to enable)");
+        }
+    }
+    
+
+    private void toggleLockScreenProtection() {
+        if (!devicePolicyManager.isAdminActive(adminComponent)) {
+            Toast.makeText(this, "Please enable Device Admin first", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            try {
+                if (isLockScreenProtectionEnabled) {
+
+                    devicePolicyManager.setKeyguardDisabledFeatures(adminComponent, 
+                            DevicePolicyManager.KEYGUARD_DISABLE_FEATURES_NONE);
+                    isLockScreenProtectionEnabled = false;
+                    Toast.makeText(this, "Lock screen protection disabled", Toast.LENGTH_SHORT).show();
+                } else {
+
+                    devicePolicyManager.setKeyguardDisabledFeatures(adminComponent,
+                            DevicePolicyManager.KEYGUARD_DISABLE_FEATURES_ALL);
+                    isLockScreenProtectionEnabled = true;
+                    Toast.makeText(this, "Lock screen protection enabled!\nNotification panel blocked on lock screen.", Toast.LENGTH_LONG).show();
+                }
+                updateLockScreenProtectionButton(true);
+            } catch (SecurityException e) {
+
+                showDeviceAdminResetDialog();
+            }
+        } else {
+            Toast.makeText(this, "Lock screen protection requires Android 5.0+", Toast.LENGTH_SHORT).show();
+        }
+    }
+    
+
+    private void showDeviceAdminResetDialog() {
+        new android.app.AlertDialog.Builder(this)
+            .setTitle("Device Admin Update Required")
+            .setMessage("To enable Lock Screen Protection, you need to:\n\n" +
+                    "1. Disable Device Admin\n" +
+                    "2. Re-enable Device Admin\n\n" +
+                    "This will grant the new lock screen policy.\n\n" +
+                    "Tap 'Open Settings' to disable Device Admin, then come back and enable it again.")
+            .setPositiveButton("Open Settings", (dialog, which) -> {
+
+                Intent intent = new Intent();
+                intent.setComponent(new ComponentName("com.android.settings",
+                        "com.android.settings.DeviceAdminSettings"));
+                try {
+                    startActivity(intent);
+                    Toast.makeText(this, "Disable 'Anti-Thief' then come back to re-enable", Toast.LENGTH_LONG).show();
+                } catch (Exception e) {
+
+                    Intent fallback = new Intent(Settings.ACTION_SECURITY_SETTINGS);
+                    startActivity(fallback);
+                    Toast.makeText(this, "Go to Device Administrators and disable Anti-Thief", Toast.LENGTH_LONG).show();
+                }
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
+    }
 
     private boolean isDeviceAdminActive() {
         return devicePolicyManager.isAdminActive(adminComponent);
     }
 
     private void requestDeviceAdmin() {
-        if (!devicePolicyManager.isAdminActive(adminComponent)) {
-            Intent intent = new Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN);
-            intent.putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComponent);
-            intent.putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION,
-                    "Anti-Theft needs Device Admin to capture photos when your device is stolen. " +
-                    "This is required to bypass MIUI security restrictions.");
-            startActivityForResult(intent, DEVICE_ADMIN_REQUEST_CODE);
-        }
+
+        Intent intent = new Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN);
+        intent.putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComponent);
+        intent.putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+                "Anti-Theft needs Device Admin to:\n" +
+                "• Capture photos when device is stolen\n" +
+                "• Block lock screen notification panel\n" +
+                "• Bypass MIUI security restrictions");
+        startActivityForResult(intent, DEVICE_ADMIN_REQUEST_CODE);
     }
 
-    /**
-     * Opens MIUI-specific app settings where user can enable:
-     * - Autostart
-     * - Background activity
-     * - Lock screen display
-     */
+
     private void openMiuiSettings() {
         try {
-            // Try MIUI Security app permissions
+
             Intent intent = new Intent("miui.intent.action.APP_PERM_EDITOR");
             intent.setClassName("com.miui.securitycenter",
                     "com.miui.permcenter.permissions.PermissionsEditorActivity");
@@ -130,14 +243,14 @@ public class MainActivity extends AppCompatActivity {
                 Toast.LENGTH_LONG).show();
         } catch (Exception e) {
             try {
-                // Try alternative MIUI settings
+
                 Intent intent = new Intent("miui.intent.action.APP_PERM_EDITOR");
                 intent.setClassName("com.miui.securitycenter",
                         "com.miui.permcenter.permissions.AppPermissionsEditorActivity");
                 intent.putExtra("extra_pkgname", getPackageName());
                 startActivity(intent);
             } catch (Exception e2) {
-                // Fallback to standard app settings
+
                 Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
                 intent.setData(Uri.parse("package:" + getPackageName()));
                 startActivity(intent);
@@ -146,6 +259,10 @@ public class MainActivity extends AppCompatActivity {
                     Toast.LENGTH_LONG).show();
             }
         }
+    }
+
+    private void openSetup() {
+        startActivity(new Intent(this, SetupActivity.class));
     }
 
     @Override
@@ -162,7 +279,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private boolean checkAllPermissions() {
-        // Check runtime permissions
+
         boolean location = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
         boolean camera = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED;
         boolean backgroundLocation = true;
@@ -171,11 +288,11 @@ public class MainActivity extends AppCompatActivity {
             backgroundLocation = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED;
         }
 
-        // Check battery optimization
+
         PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
         boolean batteryOptimized = pm.isIgnoringBatteryOptimizations(getPackageName());
 
-        // Check overlay permission
+
         boolean canOverlay = Settings.canDrawOverlays(this);
 
         return location && camera && backgroundLocation && batteryOptimized && canOverlay;
@@ -184,7 +301,7 @@ public class MainActivity extends AppCompatActivity {
     private void requestAllPermissions() {
         List<String> permissionsNeeded = new ArrayList<>();
 
-        // Location
+
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             permissionsNeeded.add(Manifest.permission.ACCESS_FINE_LOCATION);
         }
@@ -192,12 +309,12 @@ public class MainActivity extends AppCompatActivity {
             permissionsNeeded.add(Manifest.permission.ACCESS_COARSE_LOCATION);
         }
 
-        // Camera
+
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             permissionsNeeded.add(Manifest.permission.CAMERA);
         }
 
-        // Notifications (Android 13+)
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 permissionsNeeded.add(Manifest.permission.POST_NOTIFICATIONS);
@@ -207,13 +324,13 @@ public class MainActivity extends AppCompatActivity {
         if (!permissionsNeeded.isEmpty()) {
             ActivityCompat.requestPermissions(this, permissionsNeeded.toArray(new String[0]), PERMISSION_REQUEST_CODE);
         } else {
-            // All basic permissions granted, now request special permissions
+
             requestSpecialPermissions();
         }
     }
 
     private void requestSpecialPermissions() {
-        // Request background location (must be done separately on Android 10+)
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_BACKGROUND_LOCATION}, PERMISSION_REQUEST_CODE + 1);
@@ -221,7 +338,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // Request overlay permission (critical for Xiaomi)
+
         if (!Settings.canDrawOverlays(this)) {
             Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                     Uri.parse("package:" + getPackageName()));
@@ -230,7 +347,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // Request battery optimization exemption
+
         requestBatteryOptimization();
     }
 
@@ -248,10 +365,10 @@ public class MainActivity extends AppCompatActivity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         
         if (requestCode == PERMISSION_REQUEST_CODE) {
-            // After basic permissions, request special ones
+
             requestSpecialPermissions();
         } else if (requestCode == PERMISSION_REQUEST_CODE + 1) {
-            // After background location, request battery optimization
+
             requestBatteryOptimization();
         }
         
@@ -271,7 +388,26 @@ public class MainActivity extends AppCompatActivity {
             startService(serviceIntent);
         }
 
+
+        scheduleKeepAliveWorker();
+
         Toast.makeText(this, "Tracking service started!", Toast.LENGTH_SHORT).show();
         statusText.setText("✓ Service is running!\nYou can close this app now.");
+    }
+
+
+    private void scheduleKeepAliveWorker() {
+        PeriodicWorkRequest keepAliveRequest = new PeriodicWorkRequest.Builder(
+                ServiceKeepAliveWorker.class,
+                15, TimeUnit.MINUTES
+        ).build();
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+                "service_keep_alive",
+                ExistingPeriodicWorkPolicy.KEEP,
+                keepAliveRequest
+        );
+
+        android.util.Log.d("MainActivity", "KeepAlive worker scheduled");
     }
 }

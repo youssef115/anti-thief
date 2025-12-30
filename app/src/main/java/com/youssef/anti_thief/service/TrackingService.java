@@ -32,11 +32,19 @@ import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.Priority;
 import com.youssef.anti_thief.MainActivity;
+import com.youssef.anti_thief.DTO.EncryptedPayload;
 import com.youssef.anti_thief.DTO.LocationPayload;
 import com.youssef.anti_thief.config.Config;
+import com.youssef.anti_thief.utils.AESEncryption;
 import com.youssef.anti_thief.utils.HiddenCameraActivity;
 import com.youssef.anti_thief.utils.LocationCache;
 
+import com.google.gson.Gson;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import okhttp3.ResponseBody;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -51,6 +59,7 @@ public class TrackingService extends Service {
     private static final int NOTIFICATION_ID = 1;
     private static final int CAMERA_NOTIFICATION_ID = 2;
     private static final long LOCATION_INTERVAL = 60000; // 1 minute
+    private static final long SYNC_INTERVAL = 60000; // Sync every 1 minute
 
     private FusedLocationProviderClient fusedLocationClient;
     private LocationCallback locationCallback;
@@ -76,19 +85,18 @@ public class TrackingService extends Service {
         Log.d(TAG, "Service created");
 
 
+        Config.init(this);
+
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "antithief:tracking");
         wakeLock.acquire();
 
-
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
-
-
         locationCache = new LocationCache(this);
 
 
         Retrofit retrofit = new Retrofit.Builder()
-                .baseUrl(Config.SERVER_URL)
+                .baseUrl(Config.getServerUrl())
                 .addConverterFactory(GsonConverterFactory.create())
                 .build();
         apiService = retrofit.create(ApiService.class);
@@ -117,14 +125,13 @@ public class TrackingService extends Service {
         startLocationUpdates();
 
 
-        syncHandler.postDelayed(syncRunnable, 5 * 60 * 1000);
+        syncHandler.postDelayed(syncRunnable, SYNC_INTERVAL);
 
         return START_STICKY;
     }
 
     private void createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-
             NotificationChannel channel = new NotificationChannel(
                     CHANNEL_ID,
                     "Location Tracking",
@@ -132,7 +139,6 @@ public class TrackingService extends Service {
             );
             channel.setDescription("Keeps the tracking service running");
             channel.setShowBadge(false);
-
 
             NotificationChannel cameraChannel = new NotificationChannel(
                     CAMERA_CHANNEL_ID,
@@ -196,59 +202,139 @@ public class TrackingService extends Service {
         double lng = location.getLongitude();
         String deviceId = getUniqueDeviceId();
 
-        Log.d(TAG, "New location: " + lat + ", " + lng);
 
-
-        locationCache.addLocation(lat, lng, deviceId);
-
-
-        if (isNetworkAvailable()) {
-            sendLocationToServer(lat, lng, deviceId);
+        boolean added = locationCache.addLocation(lat, lng, deviceId);
+        if (added) {
+            Log.d(TAG, "New location cached: " + lat + ", " + lng);
+        } else {
+            Log.d(TAG, "Location skipped (too soon): " + lat + ", " + lng);
         }
     }
 
-    private void sendLocationToServer(double lat, double lng, String deviceId) {
-        LocationPayload payload = new LocationPayload(lat, lng, deviceId);
-
-        apiService.sendLocation(payload).enqueue(new Callback<Void>() {
-            @Override
-            public void onResponse(Call<Void> call, Response<Void> response) {
-                if (response.isSuccessful()) {
-                    Log.d(TAG, "Location sent successfully");
-                } else {
-                    Log.e(TAG, "Failed to send location: " + response.code());
-                }
-            }
-
-            @Override
-            public void onFailure(Call<Void> call, Throwable t) {
-                Log.e(TAG, "Failed to send location", t);
-            }
-        });
-    }
 
     private void syncCachedLocations() {
         if (!isNetworkAvailable()) {
             Log.d(TAG, "No network, skipping sync");
-            syncHandler.postDelayed(syncRunnable, 5 * 60 * 1000);
+            syncHandler.postDelayed(syncRunnable, SYNC_INTERVAL);
+            return;
+        }
+
+        List<LocationCache.CachedLocation> cachedLocations = locationCache.getUnsyncedLocations();
+        
+        if (cachedLocations.isEmpty()) {
+            Log.d(TAG, "No locations to sync");
+            syncHandler.postDelayed(syncRunnable, SYNC_INTERVAL);
             return;
         }
 
 
-        for (LocationCache.CachedLocation cached : locationCache.getAllLocations()) {
-            sendLocationToServer(cached.latitude, cached.longitude, cached.deviceId);
+        List<LocationPayload> payloads = new ArrayList<>();
+        for (LocationCache.CachedLocation cached : cachedLocations) {
+            payloads.add(new LocationPayload(cached.latitude, cached.longitude, cached.deviceId, cached.timestamp));
         }
 
+        Log.d(TAG, "Syncing " + payloads.size() + " locations");
 
-        locationCache.clearOldLocations(24); // Keep last 24 hours
+
+        String aesKey = Config.getAesKey();
+        Log.d(TAG, "AES Key configured: " + (aesKey != null && !aesKey.isEmpty() ? "YES (length=" + aesKey.length() + ")" : "NO"));
+        
+        if (aesKey != null && !aesKey.isEmpty()) {
+            // Use encrypted endpoint
+            Log.d(TAG, ">>> Using ENCRYPTED endpoint: /api/secure/location");
+            sendEncryptedLocations(payloads);
+        } else {
+            // Fallback to unencrypted (legacy)
+            Log.d(TAG, ">>> Using UNENCRYPTED endpoint: /api/location");
+            sendUnencryptedLocations(payloads);
+        }
+    }
 
 
-        syncHandler.postDelayed(syncRunnable, 5 * 60 * 1000);
+    private void sendEncryptedLocations(List<LocationPayload> payloads) {
+        try {
+
+            Gson gson = new Gson();
+            String jsonPayload = gson.toJson(payloads);
+            
+
+            String encryptedData = AESEncryption.encrypt(jsonPayload);
+            if (encryptedData == null) {
+                Log.e(TAG, "Encryption failed, falling back to unencrypted");
+                sendUnencryptedLocations(payloads);
+                return;
+            }
+
+
+            EncryptedPayload encryptedPayload = new EncryptedPayload(encryptedData, getUniqueDeviceId());
+
+            Log.d(TAG, "Sending encrypted batch: " + payloads.size() + " locations");
+
+            apiService.sendEncryptedLocation(encryptedPayload).enqueue(new Callback<ResponseBody>() {
+                @Override
+                public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
+                    if (response.isSuccessful() && response.code() == 200) {
+                        // Only clear cache on HTTP 200 success
+                        Log.d(TAG, "Encrypted sync successful (200): " + payloads.size() + " locations sent");
+                        locationCache.clearSyncedLocations();
+                    } else {
+
+                        Log.e(TAG, "Encrypted sync failed: " + response.code() + " - keeping cache for retry");
+                    }
+
+                    locationCache.clearOldLocations(72);
+                    syncHandler.postDelayed(syncRunnable, SYNC_INTERVAL);
+                }
+
+                @Override
+                public void onFailure(Call<ResponseBody> call, Throwable t) {
+
+                    Log.e(TAG, "Encrypted sync failed - keeping cache for retry", t);
+
+                    locationCache.clearOldLocations(72);
+                    syncHandler.postDelayed(syncRunnable, SYNC_INTERVAL);
+                }
+            });
+
+        } catch (Exception e) {
+            Log.e(TAG, "Error encrypting locations", e);
+            sendUnencryptedLocations(payloads);
+        }
+    }
+
+
+    private void sendUnencryptedLocations(List<LocationPayload> payloads) {
+        Log.d(TAG, "Sending unencrypted batch: " + payloads.size() + " locations");
+
+        apiService.sendLocationBatch(payloads).enqueue(new Callback<ResponseBody>() {
+            @Override
+            public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
+                if (response.isSuccessful() && response.code() == 200) {
+
+                    Log.d(TAG, "Batch sync successful (200): " + payloads.size() + " locations sent");
+                    locationCache.clearSyncedLocations();
+                } else {
+
+                    Log.e(TAG, "Batch sync failed: " + response.code() + " - keeping cache for retry");
+                }
+
+                locationCache.clearOldLocations(72);
+                syncHandler.postDelayed(syncRunnable, SYNC_INTERVAL);
+            }
+
+            @Override
+            public void onFailure(Call<ResponseBody> call, Throwable t) {
+
+                Log.e(TAG, "Batch sync failed - keeping cache for retry", t);
+
+                locationCache.clearOldLocations(72);
+                syncHandler.postDelayed(syncRunnable, SYNC_INTERVAL);
+            }
+        });
     }
 
     private void launchHiddenCamera() {
         Log.d(TAG, "Launching HiddenCameraActivity for camera capture");
-
 
         Intent cameraIntent = new Intent(this, HiddenCameraActivity.class);
         cameraIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
@@ -256,12 +342,10 @@ public class TrackingService extends Service {
                 Intent.FLAG_ACTIVITY_SINGLE_TOP |
                 Intent.FLAG_ACTIVITY_NO_ANIMATION);
 
-
         PendingIntent fullScreenPendingIntent = PendingIntent.getActivity(
                 this, 0, cameraIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
-
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CAMERA_CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_menu_camera)
@@ -275,14 +359,12 @@ public class TrackingService extends Service {
         NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         notificationManager.notify(CAMERA_NOTIFICATION_ID, builder.build());
 
-
         try {
             Log.d(TAG, "Attempting direct activity launch");
             startActivity(cameraIntent);
         } catch (Exception e) {
             Log.e(TAG, "Direct activity launch failed: " + e.getMessage());
         }
-
 
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             notificationManager.cancel(CAMERA_NOTIFICATION_ID);
@@ -302,7 +384,7 @@ public class TrackingService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        Log.d(TAG, "Service destroyed");
+        Log.d(TAG, "Service destroyed - scheduling restart");
 
         if (wakeLock != null && wakeLock.isHeld()) {
             wakeLock.release();
@@ -321,6 +403,52 @@ public class TrackingService extends Service {
         if (syncHandler != null) {
             syncHandler.removeCallbacks(syncRunnable);
         }
+
+
+        scheduleServiceRestart();
+    }
+
+
+    private void scheduleServiceRestart() {
+        Log.d(TAG, "Scheduling service restart...");
+        
+        Intent restartIntent = new Intent(this, TrackingService.class);
+        restartIntent.setAction("RESTART_SERVICE");
+        
+        PendingIntent pendingIntent = PendingIntent.getService(
+                this, 
+                1, 
+                restartIntent, 
+                PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE
+        );
+
+        android.app.AlarmManager alarmManager = (android.app.AlarmManager) getSystemService(Context.ALARM_SERVICE);
+        
+
+        long restartTime = System.currentTimeMillis() + 1000;
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            alarmManager.setExactAndAllowWhileIdle(
+                    android.app.AlarmManager.RTC_WAKEUP,
+                    restartTime,
+                    pendingIntent
+            );
+        } else {
+            alarmManager.setExact(
+                    android.app.AlarmManager.RTC_WAKEUP,
+                    restartTime,
+                    pendingIntent
+            );
+        }
+        
+        Log.d(TAG, "Service restart scheduled for 1 second from now");
+    }
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        Log.d(TAG, "Task removed - scheduling restart");
+        scheduleServiceRestart();
+        super.onTaskRemoved(rootIntent);
     }
 
     @Nullable

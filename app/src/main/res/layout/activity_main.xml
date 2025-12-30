@@ -45,11 +45,25 @@
         android:layout_marginBottom="16dp"/>
 
     <Button
+        android:id="@+id/lockScreenProtectionButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="🔓 Lock Screen Protection: OFF"
+        android:layout_marginBottom="16dp"/>
+
+    <Button
         android:id="@+id/startButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Start Tracking Service"
         android:enabled="false"/>
+
+    <Button
+        android:id="@+id/configButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="⚙️ Edit Configuration"
+        android:layout_marginTop="16dp"/>
 
     <TextView
         android:layout_width="match_parent"
