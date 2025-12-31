@@ -2,14 +2,9 @@ package com.youssef.anti_thief.config;
 
 import android.content.Context;
 
-/**
- * Configuration helper that reads from ConfigManager.
- * No more hardcoded values - all config comes from user setup.
- */
 public class Config {
 
     private static ConfigManager configManager;
-
 
     public static void init(Context context) {
         configManager = new ConfigManager(context.getApplicationContext());
@@ -37,6 +32,10 @@ public class Config {
 
     public static String getAesKey() {
         return configManager != null ? configManager.getAesKey() : "";
+    }
+
+    public static String getApiKey() {
+        return configManager != null ? configManager.getApiKey() : "";
     }
 
     public static boolean isSetupComplete() {

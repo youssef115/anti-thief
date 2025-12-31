@@ -46,7 +46,7 @@ public class ServiceCameraCapture {
     private Handler backgroundHandler;
     private HandlerThread backgroundThread;
     private CameraCaptureSession captureSession;
-    
+
     private List<String> backPhotoPaths = new ArrayList<>();
     private List<String> frontPhotoPaths = new ArrayList<>();
     private int currentPhotoCount = 0;
@@ -68,7 +68,7 @@ public class ServiceCameraCapture {
             Log.w(TAG, "Already capturing");
             return;
         }
-        
+
         this.callback = callback;
         this.isCapturing = true;
         this.backPhotoPaths.clear();
@@ -77,10 +77,8 @@ public class ServiceCameraCapture {
 
         Log.d(TAG, "=== STARTING SERVICE-BASED CAMERA CAPTURE ===");
         Log.d(TAG, "Will capture " + PHOTOS_PER_CAMERA + " photos per camera with " + PHOTO_INTERVAL_MS + "ms interval");
-        
-        startBackgroundThread();
-        
 
+        startBackgroundThread();
         captureFromCamera(false);
     }
 
@@ -106,7 +104,6 @@ public class ServiceCameraCapture {
             if (cameraId == null) {
                 Log.e(TAG, cameraName + " camera not found");
                 if (!isFront) {
-
                     backgroundHandler.postDelayed(() -> captureFromCamera(true), 300);
                 } else {
                     finishCapture(null);
@@ -115,7 +112,7 @@ public class ServiceCameraCapture {
             }
 
             Log.d(TAG, "Opening camera: " + cameraId);
-            
+
             cameraManager.openCamera(cameraId, new CameraDevice.StateCallback() {
                 @Override
                 public void onOpened(@NonNull CameraDevice camera) {
@@ -174,9 +171,8 @@ public class ServiceCameraCapture {
 
     private void createCaptureSession(boolean isFront) {
         try {
-
             imageReader = ImageReader.newInstance(1280, 720, ImageFormat.JPEG, PHOTOS_PER_CAMERA + 1);
-            
+
             imageReader.setOnImageAvailableListener(reader -> {
                 Image image = null;
                 try {
@@ -185,7 +181,7 @@ public class ServiceCameraCapture {
                         ByteBuffer buffer = image.getPlanes()[0].getBuffer();
                         byte[] bytes = new byte[buffer.remaining()];
                         buffer.get(bytes);
-                        
+
                         String path = saveImage(bytes, isFront, currentPhotoCount);
                         if (path != null) {
                             if (isFront) {
@@ -202,24 +198,18 @@ public class ServiceCameraCapture {
                         image.close();
                     }
                 }
-                
 
                 if (currentPhotoCount < PHOTOS_PER_CAMERA) {
-
                     backgroundHandler.postDelayed(() -> takePicture(isFront), PHOTO_INTERVAL_MS);
                 } else {
-
                     closeCamera();
                     if (!isFront) {
-
                         backgroundHandler.postDelayed(() -> captureFromCamera(true), 300);
                     } else {
-
                         finishCapture(null);
                     }
                 }
             }, backgroundHandler);
-
 
             SurfaceTexture dummyTexture = new SurfaceTexture(0);
             dummyTexture.setDefaultBufferSize(640, 480);
@@ -232,8 +222,6 @@ public class ServiceCameraCapture {
                         public void onConfigured(@NonNull CameraCaptureSession session) {
                             Log.d(TAG, "Capture session configured");
                             captureSession = session;
-                            
-
                             backgroundHandler.postDelayed(() -> takePicture(isFront), 300);
                         }
 
@@ -273,7 +261,6 @@ public class ServiceCameraCapture {
 
             CaptureRequest.Builder captureBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
             captureBuilder.addTarget(imageReader.getSurface());
-            
 
             captureBuilder.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO);
             captureBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO);
@@ -281,8 +268,8 @@ public class ServiceCameraCapture {
 
             captureSession.capture(captureBuilder.build(), new CameraCaptureSession.CaptureCallback() {
                 @Override
-                public void onCaptureCompleted(@NonNull CameraCaptureSession session, 
-                                               @NonNull CaptureRequest request, 
+                public void onCaptureCompleted(@NonNull CameraCaptureSession session,
+                                               @NonNull CaptureRequest request,
                                                @NonNull TotalCaptureResult result) {
                     Log.d(TAG, "Capture completed: " + (isFront ? "FRONT" : "BACK") + " #" + (currentPhotoCount + 1));
                 }
@@ -338,7 +325,6 @@ public class ServiceCameraCapture {
         Log.d(TAG, "Back photos: " + backPhotoPaths.size());
         Log.d(TAG, "Front photos: " + frontPhotoPaths.size());
 
-
         final List<String> allPhotoPaths = new ArrayList<>();
         allPhotoPaths.addAll(backPhotoPaths);
         allPhotoPaths.addAll(frontPhotoPaths);
@@ -346,13 +332,11 @@ public class ServiceCameraCapture {
         closeCamera();
         isCapturing = false;
 
-
         if (backgroundThread != null) {
             backgroundThread.quitSafely();
             backgroundThread = null;
             backgroundHandler = null;
         }
-
 
         new Thread(() -> {
             if (!allPhotoPaths.isEmpty()) {
@@ -362,11 +346,10 @@ public class ServiceCameraCapture {
 
                 if (zipPath != null) {
                     String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(new Date());
-                    String subject = "🚨 SECURITY ALERT: Device Accessed - " + timestamp;
+                    String subject = "SECURITY ALERT: Device Accessed - " + timestamp;
 
                     Log.d(TAG, ">>> Sending ONE encrypted ZIP via email");
                     GMailSender.sendEmailWithZip(zipPath, subject);
-
 
                     for (String photoPath : allPhotoPaths) {
                         try {
@@ -380,7 +363,7 @@ public class ServiceCameraCapture {
                     Log.e(TAG, "Failed to create ZIP, sending individual photos as fallback");
 
                     String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(new Date());
-                    String subject = "⚠️ ALERT: Screen Activated - " + timestamp;
+                    String subject = "ALERT: Screen Activated - " + timestamp;
 
                     for (int i = 0; i < allPhotoPaths.size(); i++) {
                         String path = allPhotoPaths.get(i);
@@ -391,7 +374,6 @@ public class ServiceCameraCapture {
             } else {
                 Log.w(TAG, "No photos to send!");
             }
-
 
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (callback != null) {

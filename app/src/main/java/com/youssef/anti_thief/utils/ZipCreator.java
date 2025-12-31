@@ -25,7 +25,6 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 
-
 public class ZipCreator {
 
     private static final String TAG = "ZipCreator";
@@ -58,18 +57,14 @@ public class ZipCreator {
 
             Log.d(TAG, "Creating encrypted ZIP: " + zipFile.getAbsolutePath());
 
-
             ZipFile zip = new ZipFile(zipFile, password.toCharArray());
-
 
             ZipParameters zipParameters = new ZipParameters();
             zipParameters.setEncryptFiles(true);
             zipParameters.setEncryptionMethod(EncryptionMethod.AES);
             zipParameters.setAesKeyStrength(AesKeyStrength.KEY_STRENGTH_256);
 
-
             SecurityPackage securityPackage = new SecurityPackage();
-
 
             for (String photoPath : photoPaths) {
                 File photoFile = new File(photoPath);
@@ -82,15 +77,12 @@ public class ZipCreator {
                 }
             }
 
-
             String encodedPolyline = fetchPolylineFromBackend();
             Log.d(TAG, "Fetched polyline: " + encodedPolyline);
-
 
             File jsonFile = new File(context.getExternalFilesDir(null), "security_data.json");
             try (FileWriter writer = new FileWriter(jsonFile)) {
                 Gson gson = new GsonBuilder().setPrettyPrinting().create();
-
                 writer.write("{\n");
                 writer.write("  \"timestamp\": \"" + securityPackage.timestamp + "\",\n");
                 writer.write("  \"deviceInfo\": \"" + securityPackage.deviceInfo + "\",\n");
@@ -99,18 +91,14 @@ public class ZipCreator {
                 writer.write("}");
             }
 
-
             zip.addFile(jsonFile, zipParameters);
-
 
             File mapFile = new File(context.getExternalFilesDir(null), "location_map.html");
             try (FileWriter writer = new FileWriter(mapFile)) {
                 writer.write(generateMapHtmlWithPolyline(encodedPolyline));
             }
 
-
             zip.addFile(mapFile, zipParameters);
-
 
             jsonFile.delete();
             mapFile.delete();
@@ -151,7 +139,6 @@ public class ZipCreator {
 
             if (response.isSuccessful() && response.body() != null) {
                 String polyline = response.body().string().trim();
-                // Remove quotes if present (JSON string response)
                 if (polyline.startsWith("\"") && polyline.endsWith("\"")) {
                     polyline = polyline.substring(1, polyline.length() - 1);
                 }
@@ -168,7 +155,6 @@ public class ZipCreator {
         return "";
     }
 
-
     public static boolean deleteZipFile(String zipPath) {
         try {
             File zipFile = new File(zipPath);
@@ -181,13 +167,14 @@ public class ZipCreator {
         }
     }
 
+
     private static String generateMapHtmlWithPolyline(String encodedPolyline) {
         String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(new Date());
-        
-        String html = "<!DOCTYPE html>\n" +
+
+        return "<!DOCTYPE html>\n" +
                 "<html>\n" +
                 "<head>\n" +
-                "    <title>🚨 Security Alert - Location History</title>\n" +
+                "    <title>Security Alert - Location History</title>\n" +
                 "    <meta charset=\"utf-8\" />\n" +
                 "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
                 "    <link rel=\"stylesheet\" href=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.css\" />\n" +
@@ -195,29 +182,10 @@ public class ZipCreator {
                 "    <style>\n" +
                 "        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }\n" +
                 "        #map { height: 100vh; width: 100%; }\n" +
-                "        .info-box {\n" +
-                "            position: absolute;\n" +
-                "            top: 10px;\n" +
-                "            right: 10px;\n" +
-                "            z-index: 1000;\n" +
-                "            background: white;\n" +
-                "            padding: 15px;\n" +
-                "            border-radius: 8px;\n" +
-                "            box-shadow: 0 2px 10px rgba(0,0,0,0.3);\n" +
-                "            max-width: 300px;\n" +
-                "        }\n" +
+                "        .info-box { position: absolute; top: 10px; right: 10px; z-index: 1000; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.3); max-width: 300px; }\n" +
                 "        .info-box h3 { margin: 0 0 10px 0; color: #d32f2f; }\n" +
                 "        .info-box p { margin: 5px 0; font-size: 14px; }\n" +
-                "        .legend {\n" +
-                "            position: absolute;\n" +
-                "            bottom: 30px;\n" +
-                "            left: 10px;\n" +
-                "            z-index: 1000;\n" +
-                "            background: white;\n" +
-                "            padding: 10px;\n" +
-                "            border-radius: 5px;\n" +
-                "            box-shadow: 0 2px 5px rgba(0,0,0,0.2);\n" +
-                "        }\n" +
+                "        .legend { position: absolute; bottom: 30px; left: 10px; z-index: 1000; background: white; padding: 10px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }\n" +
                 "        .legend-item { display: flex; align-items: center; margin: 5px 0; }\n" +
                 "        .legend-line { width: 30px; height: 3px; background: #2196F3; margin-right: 8px; }\n" +
                 "        .legend-marker { width: 12px; height: 12px; background: #d32f2f; border-radius: 50%; margin-right: 8px; }\n" +
@@ -227,11 +195,11 @@ public class ZipCreator {
                 "<body>\n" +
                 "    <div id=\"map\"></div>\n" +
                 "    <div class=\"info-box\" id=\"infoBox\">\n" +
-                "        <h3>🚨 Security Alert</h3>\n" +
+                "        <h3>Security Alert</h3>\n" +
                 "        <p><strong>Last Known Position:</strong></p>\n" +
-                "        <p id=\"lastLat\">📍 Lat: Loading...</p>\n" +
-                "        <p id=\"lastLng\">📍 Lng: Loading...</p>\n" +
-                "        <p>🕐 Time: " + timestamp + "</p>\n" +
+                "        <p id=\"lastLat\">Lat: Loading...</p>\n" +
+                "        <p id=\"lastLng\">Lng: Loading...</p>\n" +
+                "        <p>Time: " + timestamp + "</p>\n" +
                 "        <p id=\"totalPoints\"><strong>Total Points:</strong> Loading...</p>\n" +
                 "    </div>\n" +
                 "    <div class=\"legend\">\n" +
@@ -240,109 +208,51 @@ public class ZipCreator {
                 "        <div class=\"legend-item\"><div class=\"legend-start\"></div> Start Point (24h ago)</div>\n" +
                 "    </div>\n" +
                 "    <script>\n" +
-                "        // Encoded polyline from backend\n" +
                 "        var encodedPolyline = '" + encodedPolyline + "';\n" +
-                "        \n" +
-                "        // Polyline decoding function (Google's algorithm)\n" +
                 "        function decodePolyline(encoded) {\n" +
                 "            var points = [];\n" +
                 "            var index = 0, len = encoded.length;\n" +
                 "            var lat = 0, lng = 0;\n" +
-                "            \n" +
                 "            while (index < len) {\n" +
                 "                var b, shift = 0, result = 0;\n" +
-                "                do {\n" +
-                "                    b = encoded.charCodeAt(index++) - 63;\n" +
-                "                    result |= (b & 0x1f) << shift;\n" +
-                "                    shift += 5;\n" +
-                "                } while (b >= 0x20);\n" +
+                "                do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);\n" +
                 "                var dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));\n" +
                 "                lat += dlat;\n" +
-                "                \n" +
-                "                shift = 0;\n" +
-                "                result = 0;\n" +
-                "                do {\n" +
-                "                    b = encoded.charCodeAt(index++) - 63;\n" +
-                "                    result |= (b & 0x1f) << shift;\n" +
-                "                    shift += 5;\n" +
-                "                } while (b >= 0x20);\n" +
+                "                shift = 0; result = 0;\n" +
+                "                do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);\n" +
                 "                var dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));\n" +
                 "                lng += dlng;\n" +
-                "                \n" +
                 "                points.push([lat / 1e5, lng / 1e5]);\n" +
                 "            }\n" +
                 "            return points;\n" +
                 "        }\n" +
-                "        \n" +
-                "        // Decode the polyline\n" +
                 "        var locations = decodePolyline(encodedPolyline);\n" +
-                "        \n" +
-                "        // Update info box\n" +
                 "        document.getElementById('totalPoints').innerHTML = '<strong>Total Points:</strong> ' + locations.length;\n" +
-                "        \n" +
-                "        // Default center\n" +
-                "        var centerLat = 35.6762;\n" +
-                "        var centerLng = 10.0982;\n" +
-                "        \n" +
+                "        var centerLat = 35.6762, centerLng = 10.0982;\n" +
                 "        if (locations.length > 0) {\n" +
                 "            var lastPos = locations[locations.length - 1];\n" +
-                "            centerLat = lastPos[0];\n" +
-                "            centerLng = lastPos[1];\n" +
-                "            document.getElementById('lastLat').innerHTML = '📍 Lat: ' + centerLat.toFixed(6);\n" +
-                "            document.getElementById('lastLng').innerHTML = '📍 Lng: ' + centerLng.toFixed(6);\n" +
+                "            centerLat = lastPos[0]; centerLng = lastPos[1];\n" +
+                "            document.getElementById('lastLat').innerHTML = 'Lat: ' + centerLat.toFixed(6);\n" +
+                "            document.getElementById('lastLng').innerHTML = 'Lng: ' + centerLng.toFixed(6);\n" +
                 "        }\n" +
-                "        \n" +
-                "        // Initialize map\n" +
                 "        var map = L.map('map').setView([centerLat, centerLng], 14);\n" +
-                "        \n" +
-                "        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {\n" +
-                "            attribution: '© OpenStreetMap contributors'\n" +
-                "        }).addTo(map);\n" +
-                "        \n" +
+                "        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(map);\n" +
                 "        if (locations.length > 0) {\n" +
-                "            // Draw polyline (movement path)\n" +
-                "            var polyline = L.polyline(locations, {\n" +
-                "                color: '#2196F3',\n" +
-                "                weight: 4,\n" +
-                "                opacity: 0.8\n" +
-                "            }).addTo(map);\n" +
-                "            \n" +
-                "            // Fit map to show entire path\n" +
+                "            var polyline = L.polyline(locations, { color: '#2196F3', weight: 4, opacity: 0.8 }).addTo(map);\n" +
                 "            map.fitBounds(polyline.getBounds(), { padding: [50, 50] });\n" +
-                "            \n" +
-                "            // Add marker for LAST position (thief's current location) - RED\n" +
                 "            var lastPos = locations[locations.length - 1];\n" +
-                "            var lastMarker = L.marker(lastPos, {\n" +
-                "                icon: L.divIcon({\n" +
-                "                    className: 'custom-marker',\n" +
-                "                    html: '<div style=\\\"background:#d32f2f;width:20px;height:20px;border-radius:50%;border:3px solid white;box-shadow:0 2px 5px rgba(0,0,0,0.4);\\\"></div>',\n" +
-                "                    iconSize: [26, 26],\n" +
-                "                    iconAnchor: [13, 13]\n" +
-                "                })\n" +
-                "            }).addTo(map);\n" +
-                "            \n" +
-                "            lastMarker.bindPopup('<b>🚨 LAST KNOWN POSITION</b><br><br>This is where the device was <b>most recently</b> detected.<br><br>Lat: ' + lastPos[0].toFixed(6) + '<br>Lng: ' + lastPos[1].toFixed(6)).openPopup();\n" +
-                "            \n" +
-                "            // Add marker for START position (24h ago) - GREEN\n" +
+                "            var lastMarker = L.marker(lastPos, { icon: L.divIcon({ className: 'custom-marker', html: '<div style=\"background:#d32f2f;width:20px;height:20px;border-radius:50%;border:3px solid white;box-shadow:0 2px 5px rgba(0,0,0,0.4);\"></div>', iconSize: [26, 26], iconAnchor: [13, 13] }) }).addTo(map);\n" +
+                "            lastMarker.bindPopup('<b>LAST KNOWN POSITION</b><br><br>Lat: ' + lastPos[0].toFixed(6) + '<br>Lng: ' + lastPos[1].toFixed(6)).openPopup();\n" +
                 "            if (locations.length > 1) {\n" +
                 "                var startPos = locations[0];\n" +
-                "                L.marker(startPos, {\n" +
-                "                    icon: L.divIcon({\n" +
-                "                        className: 'start-marker',\n" +
-                "                        html: '<div style=\\\"background:#4CAF50;width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 2px 5px rgba(0,0,0,0.3);\\\"></div>',\n" +
-                "                        iconSize: [18, 18],\n" +
-                "                        iconAnchor: [9, 9]\n" +
-                "                    })\n" +
-                "                }).addTo(map).bindPopup('<b>Start Point</b><br>First recorded position (24h ago)<br><br>Lat: ' + startPos[0].toFixed(6) + '<br>Lng: ' + startPos[1].toFixed(6));\n" +
+                "                L.marker(startPos, { icon: L.divIcon({ className: 'start-marker', html: '<div style=\"background:#4CAF50;width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 2px 5px rgba(0,0,0,0.3);\"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }) }).addTo(map).bindPopup('<b>Start Point</b><br>Lat: ' + startPos[0].toFixed(6) + '<br>Lng: ' + startPos[1].toFixed(6));\n" +
                 "            }\n" +
                 "        } else {\n" +
-                "            document.getElementById('lastLat').innerHTML = '📍 Lat: No data';\n" +
-                "            document.getElementById('lastLng').innerHTML = '📍 Lng: No data';\n" +
+                "            document.getElementById('lastLat').innerHTML = 'Lat: No data';\n" +
+                "            document.getElementById('lastLng').innerHTML = 'Lng: No data';\n" +
                 "        }\n" +
                 "    </script>\n" +
                 "</body>\n" +
                 "</html>";
-
-        return html;
     }
 }

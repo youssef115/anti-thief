@@ -16,8 +16,8 @@ public class LocationCache {
     private static final String PREFS_NAME = "location_cache";
     private static final String KEY_LOCATIONS = "cached_locations";
     private static final String KEY_LAST_LOCATION_TIME = "last_location_time";
-    private static final long MIN_INTERVAL_MS = 60000; // 1 minute minimum between locations
-    
+    private static final long MIN_INTERVAL_MS = 60000;
+
     private final SharedPreferences prefs;
     private final Gson gson;
 
@@ -26,20 +26,17 @@ public class LocationCache {
         gson = new Gson();
     }
 
-
     public boolean addLocation(double latitude, double longitude, String deviceId) {
         long now = System.currentTimeMillis();
         long lastTime = prefs.getLong(KEY_LAST_LOCATION_TIME, 0);
-        
 
         if (now - lastTime < MIN_INTERVAL_MS) {
             return false;
         }
-        
+
         List<CachedLocation> locations = getAllLocations();
         locations.add(new CachedLocation(latitude, longitude, deviceId, now));
         saveLocations(locations);
-        
 
         prefs.edit().putLong(KEY_LAST_LOCATION_TIME, now).apply();
         return true;
@@ -50,16 +47,15 @@ public class LocationCache {
         if (json == null) {
             return new ArrayList<>();
         }
-        
+
         Type type = new TypeToken<List<CachedLocation>>(){}.getType();
         List<CachedLocation> locations = gson.fromJson(json, type);
         return locations != null ? locations : new ArrayList<>();
     }
 
     public List<CachedLocation> getUnsyncedLocations() {
-        return getAllLocations(); // For now, return all - we clear after successful sync
+        return getAllLocations();
     }
-
 
     public void clearSyncedLocations() {
         prefs.edit().remove(KEY_LOCATIONS).apply();
@@ -68,14 +64,14 @@ public class LocationCache {
     public void clearOldLocations(int hoursToKeep) {
         List<CachedLocation> locations = getAllLocations();
         long cutoffTime = System.currentTimeMillis() - (hoursToKeep * 60 * 60 * 1000L);
-        
+
         Iterator<CachedLocation> iterator = locations.iterator();
         while (iterator.hasNext()) {
             if (iterator.next().timestamp < cutoffTime) {
                 iterator.remove();
             }
         }
-        
+
         saveLocations(locations);
     }
 

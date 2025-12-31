@@ -11,11 +11,9 @@ import retrofit2.http.Body;
 import retrofit2.http.POST;
 
 public interface ApiService {
-    
 
     @POST("api/location")
     Call<ResponseBody> sendLocationBatch(@Body List<LocationPayload> payloads);
-    
 
     @POST("api/secure/location")
     Call<ResponseBody> sendEncryptedLocation(@Body EncryptedPayload payload);

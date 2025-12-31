@@ -19,7 +19,6 @@ import androidx.core.app.ActivityCompat;
 
 import com.youssef.anti_thief.R;
 
-
 public class HiddenCameraActivity extends AppCompatActivity {
 
     private static final String TAG = "HiddenCamera";
@@ -32,7 +31,6 @@ public class HiddenCameraActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
 
         try {
-
             PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
             wakeLock = pm.newWakeLock(
                     PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP,
@@ -40,15 +38,12 @@ public class HiddenCameraActivity extends AppCompatActivity {
             );
             wakeLock.acquire(30000);
 
-
             setupLockScreenFlags();
-
 
             getWindow().setBackgroundDrawableResource(android.R.color.transparent);
             setContentView(R.layout.activity_hidden);
 
             Log.d(TAG, "Layout set, checking camera permission");
-
 
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
                 Log.e(TAG, "Camera permission not granted!");
@@ -56,12 +51,10 @@ public class HiddenCameraActivity extends AppCompatActivity {
                 return;
             }
 
-
             NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm != null) nm.cancel(2);
 
             Log.d(TAG, "Starting camera capture in 500ms...");
-
 
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
                 Log.d(TAG, "Timer fired, starting ServiceCameraCapture");

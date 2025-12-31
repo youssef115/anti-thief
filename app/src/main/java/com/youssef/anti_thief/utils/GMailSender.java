@@ -27,7 +27,6 @@ public class GMailSender {
 
     private static final String TAG = "GMailSender";
 
-
     public static void sendEmailWithZip(String zipPath, String subject) {
         Log.d(TAG, "=== sendEmailWithZip called ===");
         Log.d(TAG, "ZIP path: " + zipPath);
@@ -45,7 +44,6 @@ public class GMailSender {
                 String emailUser = Config.getEmailUser();
                 String emailPass = Config.getEmailPass();
                 String targetEmail = Config.getTargetEmail();
-                String zipPassword = Config.getZipPassword();
 
                 Log.d(TAG, "Email thread started - preparing to send ZIP");
                 Log.d(TAG, "From: " + emailUser);
@@ -77,20 +75,18 @@ public class GMailSender {
 
                 Multipart multipart = new MimeMultipart();
 
-
                 MimeBodyPart textPart = new MimeBodyPart();
                 String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(new Date());
-                String bodyText = "🚨 SECURITY ALERT 🚨\n\n" +
+                String bodyText = "SECURITY ALERT\n\n" +
                         "Your device was accessed at: " + timestamp + "\n\n" +
                         "Attached is an encrypted ZIP file containing:\n" +
-                        "• Photos captured during access (front + back cameras)\n" +
-                        "• Location history from the last 24 hours\n" +
-                        "• Interactive map showing device movement (location_map.html)\n\n" +
+                        "- Photos captured during access (front + back cameras)\n" +
+                        "- Location history from the last 24 hours\n" +
+                        "- Interactive map showing device movement (location_map.html)\n\n" +
                         "This is an automated security alert from your Anti-Thief system.\n" +
                         "Device: " + android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL;
                 textPart.setText(bodyText);
                 multipart.addBodyPart(textPart);
-
 
                 Log.d(TAG, "Adding ZIP attachment: " + zipFile.getName());
                 MimeBodyPart attachmentPart = new MimeBodyPart();
@@ -104,7 +100,6 @@ public class GMailSender {
                 Log.d(TAG, ">>> Sending email with ZIP via Transport.send()...");
                 Transport.send(message);
                 Log.d(TAG, "=== EMAIL WITH ZIP SENT SUCCESSFULLY! ===");
-
 
                 boolean deleted = zipFile.delete();
                 Log.d(TAG, "ZIP file deleted after sending: " + deleted);
@@ -121,7 +116,6 @@ public class GMailSender {
         emailThread.start();
         Log.d(TAG, "ZIP email thread started: " + emailThread.getName());
     }
-
 
     public static void sendEmailWithAttachment(String imagePath, String subject) {
         Log.d(TAG, "=== sendEmailWithAttachment called ===");

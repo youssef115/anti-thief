@@ -9,7 +9,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="🔒 Anti-Thief Tracker"
+        android:text="Anti-Thief Tracker"
         android:textSize="24sp"
         android:textStyle="bold"
         android:layout_marginBottom="32dp"/>
@@ -48,7 +48,7 @@
         android:id="@+id/lockScreenProtectionButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="🔓 Lock Screen Protection: OFF"
+        android:text="Lock Screen Protection: OFF"
         android:layout_marginBottom="16dp"/>
 
     <Button
@@ -62,7 +62,7 @@
         android:id="@+id/configButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="⚙️ Edit Configuration"
+        android:text="Edit Configuration"
         android:layout_marginTop="16dp"/>
 
     <TextView

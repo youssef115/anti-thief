@@ -13,7 +13,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="🔒 Anti-Thief Setup"
+            android:text="Anti-Thief Setup"
             android:textSize="24sp"
             android:textStyle="bold"
             android:layout_gravity="center"
@@ -128,7 +128,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="🔐 AES Encryption Key"
+            android:text="AES Encryption Key"
             android:textStyle="bold"
             android:layout_marginBottom="4dp"/>
 
@@ -168,9 +168,34 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="⚠️ Copy this key to your backend server!"
+            android:text="Copy this key to your backend server!"
             android:textSize="12sp"
             android:textColor="#FF5722"
+            android:layout_marginBottom="16dp"/>
+
+        <!-- API Key -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="API Key"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Authentication key for backend API requests"
+            android:textSize="12sp"
+            android:alpha="0.6"
+            android:layout_marginBottom="4dp"/>
+
+        <EditText
+            android:id="@+id/apiKeyInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Enter your API key"
+            android:inputType="textVisiblePassword"
+            android:textSize="12sp"
             android:layout_marginBottom="32dp"/>
 
         <!-- Save Button -->

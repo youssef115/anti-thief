@@ -11,7 +11,6 @@ import androidx.work.WorkerParameters;
 
 import com.youssef.anti_thief.service.TrackingService;
 
-
 public class ServiceKeepAliveWorker extends Worker {
 
     private static final String TAG = "ServiceKeepAliveWorker";
@@ -27,19 +26,18 @@ public class ServiceKeepAliveWorker extends Worker {
 
         try {
             Context context = getApplicationContext();
-            
 
             Intent serviceIntent = new Intent(context, TrackingService.class);
-            
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(serviceIntent);
             } else {
                 context.startService(serviceIntent);
             }
-            
+
             Log.d(TAG, "TrackingService start requested");
             return Result.success();
-            
+
         } catch (Exception e) {
             Log.e(TAG, "Failed to start service", e);
             return Result.retry();

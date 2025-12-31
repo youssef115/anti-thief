@@ -11,7 +11,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.youssef.anti_thief.config.ConfigManager;
 import com.youssef.anti_thief.utils.AESEncryption;
 
-
 public class SetupActivity extends AppCompatActivity {
 
     private EditText serverUrlInput;
@@ -20,10 +19,14 @@ public class SetupActivity extends AppCompatActivity {
     private EditText targetEmailInput;
     private EditText zipPasswordInput;
     private EditText aesKeyInput;
+    private EditText apiKeyInput;
     private Button saveButton;
     private Button generateKeyButton;
 
     private ConfigManager configManager;
+
+    private static final String DEFAULT_AES_KEY = "753dca4c445bbc2602f47c5337ae5067c1a767ead6d4dbc46d1e8102efd13ceb";
+    private static final String DEFAULT_API_KEY = "67d5778395bdd63887053f30ad112017f939a4a6b535cc94";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -32,24 +35,21 @@ public class SetupActivity extends AppCompatActivity {
 
         configManager = new ConfigManager(this);
 
-
         serverUrlInput = findViewById(R.id.serverUrlInput);
         senderEmailInput = findViewById(R.id.senderEmailInput);
         emailPassInput = findViewById(R.id.emailPassInput);
         targetEmailInput = findViewById(R.id.targetEmailInput);
         zipPasswordInput = findViewById(R.id.zipPasswordInput);
         aesKeyInput = findViewById(R.id.aesKeyInput);
+        apiKeyInput = findViewById(R.id.apiKeyInput);
         saveButton = findViewById(R.id.saveButton);
         generateKeyButton = findViewById(R.id.generateKeyButton);
-
 
         loadExistingConfig();
 
         saveButton.setOnClickListener(v -> saveConfiguration());
         generateKeyButton.setOnClickListener(v -> generateAesKey());
     }
-
-    private static final String DEFAULT_AES_KEY = "753dca4c445bbc2602f47c5337ae5067c1a767ead6d4dbc46d1e8102efd13ceb";
 
     private void loadExistingConfig() {
         if (configManager.isSetupComplete()) {
@@ -59,9 +59,10 @@ public class SetupActivity extends AppCompatActivity {
             targetEmailInput.setText(configManager.getTargetEmail());
             zipPasswordInput.setText(configManager.getZipPassword());
             aesKeyInput.setText(configManager.getAesKey());
+            apiKeyInput.setText(configManager.getApiKey());
         } else {
-
             aesKeyInput.setText(DEFAULT_AES_KEY);
+            apiKeyInput.setText(DEFAULT_API_KEY);
         }
     }
 
@@ -78,7 +79,7 @@ public class SetupActivity extends AppCompatActivity {
         String targetEmail = targetEmailInput.getText().toString().trim();
         String zipPassword = zipPasswordInput.getText().toString().trim();
         String aesKey = aesKeyInput.getText().toString().trim();
-
+        String apiKey = apiKeyInput.getText().toString().trim();
 
         if (serverUrl.isEmpty()) {
             serverUrlInput.setError("Server URL is required");
@@ -133,11 +134,14 @@ public class SetupActivity extends AppCompatActivity {
             return;
         }
 
+        if (apiKey.isEmpty()) {
+            apiKeyInput.setError("API key is required for backend authentication");
+            return;
+        }
 
-        configManager.saveConfig(serverUrl, senderEmail, emailPass, targetEmail, zipPassword, aesKey);
+        configManager.saveConfig(serverUrl, senderEmail, emailPass, targetEmail, zipPassword, aesKey, apiKey);
 
         Toast.makeText(this, "Configuration saved!", Toast.LENGTH_SHORT).show();
-
 
         Intent intent = new Intent(this, MainActivity.class);
         startActivity(intent);

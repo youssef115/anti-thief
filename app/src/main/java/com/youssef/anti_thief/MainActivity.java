@@ -147,9 +147,9 @@ public class MainActivity extends AppCompatActivity {
         }
         
         if (isLockScreenProtectionEnabled) {
-            lockScreenProtectionButton.setText("🔒 Lock Screen Protection: ON (Tap to disable)");
+            lockScreenProtectionButton.setText("Lock Screen Protection: ON (Tap to disable)");
         } else {
-            lockScreenProtectionButton.setText("🔓 Lock Screen Protection: OFF (Tap to enable)");
+            lockScreenProtectionButton.setText("Lock Screen Protection: OFF (Tap to enable)");
         }
     }
     

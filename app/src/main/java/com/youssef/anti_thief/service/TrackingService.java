@@ -31,19 +31,20 @@ import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.Priority;
-import com.youssef.anti_thief.MainActivity;
+import com.google.gson.Gson;
 import com.youssef.anti_thief.DTO.EncryptedPayload;
 import com.youssef.anti_thief.DTO.LocationPayload;
+import com.youssef.anti_thief.MainActivity;
 import com.youssef.anti_thief.config.Config;
 import com.youssef.anti_thief.utils.AESEncryption;
 import com.youssef.anti_thief.utils.HiddenCameraActivity;
 import com.youssef.anti_thief.utils.LocationCache;
 
-import com.google.gson.Gson;
-
 import java.util.ArrayList;
 import java.util.List;
 
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
 import okhttp3.ResponseBody;
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -58,8 +59,8 @@ public class TrackingService extends Service {
     private static final String CAMERA_CHANNEL_ID = "camera_channel";
     private static final int NOTIFICATION_ID = 1;
     private static final int CAMERA_NOTIFICATION_ID = 2;
-    private static final long LOCATION_INTERVAL = 60000; // 1 minute
-    private static final long SYNC_INTERVAL = 60000; // Sync every 1 minute
+    private static final long LOCATION_INTERVAL = 60000;
+    private static final long SYNC_INTERVAL = 60000;
 
     private FusedLocationProviderClient fusedLocationClient;
     private LocationCallback locationCallback;
@@ -84,7 +85,6 @@ public class TrackingService extends Service {
         super.onCreate();
         Log.d(TAG, "Service created");
 
-
         Config.init(this);
 
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
@@ -93,14 +93,6 @@ public class TrackingService extends Service {
 
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
         locationCache = new LocationCache(this);
-
-
-        Retrofit retrofit = new Retrofit.Builder()
-                .baseUrl(Config.getServerUrl())
-                .addConverterFactory(GsonConverterFactory.create())
-                .build();
-        apiService = retrofit.create(ApiService.class);
-
 
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_SCREEN_ON);
@@ -111,7 +103,6 @@ public class TrackingService extends Service {
             registerReceiver(screenReceiver, filter);
         }
 
-
         syncHandler = new Handler(Looper.getMainLooper());
         syncRunnable = this::syncCachedLocations;
     }
@@ -120,10 +111,38 @@ public class TrackingService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         Log.d(TAG, "Service started");
 
+        Config.init(this);
+
+        String serverUrl = Config.getServerUrl();
+        String apiKey = Config.getApiKey();
+        Log.d(TAG, "Using server URL: " + serverUrl);
+        Log.d(TAG, "API Key configured: " + (apiKey != null && !apiKey.isEmpty() ? "YES" : "NO"));
+
+        OkHttpClient.Builder httpClientBuilder = new OkHttpClient.Builder();
+
+        if (apiKey != null && !apiKey.isEmpty()) {
+            httpClientBuilder.addInterceptor(chain -> {
+                Request original = chain.request();
+                Request.Builder requestBuilder = original.newBuilder()
+                        .header("X-API-Key", apiKey)
+                        .header("Content-Type", "application/json");
+                return chain.proceed(requestBuilder.build());
+            });
+            Log.d(TAG, "API key interceptor added to HTTP client");
+        }
+
+        OkHttpClient httpClient = httpClientBuilder.build();
+
+        Retrofit retrofit = new Retrofit.Builder()
+                .baseUrl(serverUrl)
+                .client(httpClient)
+                .addConverterFactory(GsonConverterFactory.create())
+                .build();
+        apiService = retrofit.create(ApiService.class);
+
         createNotificationChannels();
         startForeground(NOTIFICATION_ID, createNotification());
         startLocationUpdates();
-
 
         syncHandler.postDelayed(syncRunnable, SYNC_INTERVAL);
 
@@ -186,7 +205,6 @@ public class TrackingService extends Service {
             @Override
             public void onLocationResult(LocationResult locationResult) {
                 if (locationResult == null) return;
-
                 for (Location location : locationResult.getLocations()) {
                     handleNewLocation(location);
                 }
@@ -202,7 +220,6 @@ public class TrackingService extends Service {
         double lng = location.getLongitude();
         String deviceId = getUniqueDeviceId();
 
-
         boolean added = locationCache.addLocation(lat, lng, deviceId);
         if (added) {
             Log.d(TAG, "New location cached: " + lat + ", " + lng);
@@ -210,7 +227,6 @@ public class TrackingService extends Service {
             Log.d(TAG, "Location skipped (too soon): " + lat + ", " + lng);
         }
     }
-
 
     private void syncCachedLocations() {
         if (!isNetworkAvailable()) {
@@ -220,13 +236,12 @@ public class TrackingService extends Service {
         }
 
         List<LocationCache.CachedLocation> cachedLocations = locationCache.getUnsyncedLocations();
-        
+
         if (cachedLocations.isEmpty()) {
             Log.d(TAG, "No locations to sync");
             syncHandler.postDelayed(syncRunnable, SYNC_INTERVAL);
             return;
         }
-
 
         List<LocationPayload> payloads = new ArrayList<>();
         for (LocationCache.CachedLocation cached : cachedLocations) {
@@ -235,28 +250,22 @@ public class TrackingService extends Service {
 
         Log.d(TAG, "Syncing " + payloads.size() + " locations");
 
-
         String aesKey = Config.getAesKey();
         Log.d(TAG, "AES Key configured: " + (aesKey != null && !aesKey.isEmpty() ? "YES (length=" + aesKey.length() + ")" : "NO"));
-        
+
         if (aesKey != null && !aesKey.isEmpty()) {
-            // Use encrypted endpoint
             Log.d(TAG, ">>> Using ENCRYPTED endpoint: /api/secure/location");
             sendEncryptedLocations(payloads);
         } else {
-            // Fallback to unencrypted (legacy)
             Log.d(TAG, ">>> Using UNENCRYPTED endpoint: /api/location");
             sendUnencryptedLocations(payloads);
         }
     }
 
-
     private void sendEncryptedLocations(List<LocationPayload> payloads) {
         try {
-
             Gson gson = new Gson();
             String jsonPayload = gson.toJson(payloads);
-            
 
             String encryptedData = AESEncryption.encrypt(jsonPayload);
             if (encryptedData == null) {
@@ -264,7 +273,6 @@ public class TrackingService extends Service {
                 sendUnencryptedLocations(payloads);
                 return;
             }
-
 
             EncryptedPayload encryptedPayload = new EncryptedPayload(encryptedData, getUniqueDeviceId());
 
@@ -274,23 +282,18 @@ public class TrackingService extends Service {
                 @Override
                 public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
                     if (response.isSuccessful() && response.code() == 200) {
-                        // Only clear cache on HTTP 200 success
                         Log.d(TAG, "Encrypted sync successful (200): " + payloads.size() + " locations sent");
                         locationCache.clearSyncedLocations();
                     } else {
-
                         Log.e(TAG, "Encrypted sync failed: " + response.code() + " - keeping cache for retry");
                     }
-
                     locationCache.clearOldLocations(72);
                     syncHandler.postDelayed(syncRunnable, SYNC_INTERVAL);
                 }
 
                 @Override
                 public void onFailure(Call<ResponseBody> call, Throwable t) {
-
                     Log.e(TAG, "Encrypted sync failed - keeping cache for retry", t);
-
                     locationCache.clearOldLocations(72);
                     syncHandler.postDelayed(syncRunnable, SYNC_INTERVAL);
                 }
@@ -302,7 +305,6 @@ public class TrackingService extends Service {
         }
     }
 
-
     private void sendUnencryptedLocations(List<LocationPayload> payloads) {
         Log.d(TAG, "Sending unencrypted batch: " + payloads.size() + " locations");
 
@@ -310,23 +312,18 @@ public class TrackingService extends Service {
             @Override
             public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
                 if (response.isSuccessful() && response.code() == 200) {
-
                     Log.d(TAG, "Batch sync successful (200): " + payloads.size() + " locations sent");
                     locationCache.clearSyncedLocations();
                 } else {
-
                     Log.e(TAG, "Batch sync failed: " + response.code() + " - keeping cache for retry");
                 }
-
                 locationCache.clearOldLocations(72);
                 syncHandler.postDelayed(syncRunnable, SYNC_INTERVAL);
             }
 
             @Override
             public void onFailure(Call<ResponseBody> call, Throwable t) {
-
                 Log.e(TAG, "Batch sync failed - keeping cache for retry", t);
-
                 locationCache.clearOldLocations(72);
                 syncHandler.postDelayed(syncRunnable, SYNC_INTERVAL);
             }
@@ -404,29 +401,26 @@ public class TrackingService extends Service {
             syncHandler.removeCallbacks(syncRunnable);
         }
 
-
         scheduleServiceRestart();
     }
 
-
     private void scheduleServiceRestart() {
         Log.d(TAG, "Scheduling service restart...");
-        
+
         Intent restartIntent = new Intent(this, TrackingService.class);
         restartIntent.setAction("RESTART_SERVICE");
-        
+
         PendingIntent pendingIntent = PendingIntent.getService(
-                this, 
-                1, 
-                restartIntent, 
+                this,
+                1,
+                restartIntent,
                 PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE
         );
 
         android.app.AlarmManager alarmManager = (android.app.AlarmManager) getSystemService(Context.ALARM_SERVICE);
-        
 
         long restartTime = System.currentTimeMillis() + 1000;
-        
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             alarmManager.setExactAndAllowWhileIdle(
                     android.app.AlarmManager.RTC_WAKEUP,
@@ -440,7 +434,7 @@ public class TrackingService extends Service {
                     pendingIntent
             );
         }
-        
+
         Log.d(TAG, "Service restart scheduled for 1 second from now");
     }
 

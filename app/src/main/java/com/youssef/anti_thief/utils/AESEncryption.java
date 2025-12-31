@@ -13,14 +13,12 @@ import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
-
 public class AESEncryption {
 
     private static final String TAG = "AESEncryption";
     private static final String ALGORITHM = "AES/GCM/NoPadding";
-    private static final int GCM_IV_LENGTH = 12; // 96 bits
-    private static final int GCM_TAG_LENGTH = 128; // bits
-
+    private static final int GCM_IV_LENGTH = 12;
+    private static final int GCM_TAG_LENGTH = 128;
 
     public static String encrypt(String plaintext) {
         try {
@@ -30,21 +28,16 @@ public class AESEncryption {
                 return plaintext;
             }
 
-
             SecretKeySpec secretKey = deriveKey(key);
-
 
             byte[] iv = new byte[GCM_IV_LENGTH];
             new SecureRandom().nextBytes(iv);
-
 
             Cipher cipher = Cipher.getInstance(ALGORITHM);
             GCMParameterSpec parameterSpec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
             cipher.init(Cipher.ENCRYPT_MODE, secretKey, parameterSpec);
 
-
             byte[] ciphertext = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
-
 
             byte[] combined = new byte[iv.length + ciphertext.length];
             System.arraycopy(iv, 0, combined, 0, iv.length);
@@ -60,7 +53,6 @@ public class AESEncryption {
         }
     }
 
-
     public static String decrypt(String encryptedBase64) {
         try {
             String key = Config.getAesKey();
@@ -69,23 +61,18 @@ public class AESEncryption {
                 return null;
             }
 
-
             SecretKeySpec secretKey = deriveKey(key);
 
-
             byte[] combined = Base64.decode(encryptedBase64, Base64.NO_WRAP);
-
 
             byte[] iv = new byte[GCM_IV_LENGTH];
             byte[] ciphertext = new byte[combined.length - GCM_IV_LENGTH];
             System.arraycopy(combined, 0, iv, 0, iv.length);
             System.arraycopy(combined, iv.length, ciphertext, 0, ciphertext.length);
 
-
             Cipher cipher = Cipher.getInstance(ALGORITHM);
             GCMParameterSpec parameterSpec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
             cipher.init(Cipher.DECRYPT_MODE, secretKey, parameterSpec);
-
 
             byte[] plaintext = cipher.doFinal(ciphertext);
             return new String(plaintext, StandardCharsets.UTF_8);
@@ -96,13 +83,11 @@ public class AESEncryption {
         }
     }
 
-
     private static SecretKeySpec deriveKey(String password) throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         byte[] keyBytes = digest.digest(password.getBytes(StandardCharsets.UTF_8));
         return new SecretKeySpec(keyBytes, "AES");
     }
-
 
     public static String generateKey() {
         byte[] key = new byte[32];
