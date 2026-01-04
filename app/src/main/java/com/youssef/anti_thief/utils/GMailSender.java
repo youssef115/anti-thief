@@ -27,6 +27,61 @@ public class GMailSender {
 
     private static final String TAG = "GMailSender";
 
+    /**
+     * V4: Send text-only email (no attachment)
+     */
+    public static void sendEmail(String subject, String body) {
+        Log.d(TAG, "=== sendEmail (text only) called ===");
+        Log.d(TAG, "Subject: " + subject);
+
+        Thread emailThread = new Thread(() -> {
+            try {
+                String emailUser = Config.getEmailUser();
+                String emailPass = Config.getEmailPass();
+                String targetEmail = Config.getTargetEmail();
+
+                Log.d(TAG, "Email thread started - text only");
+                Log.d(TAG, "From: " + emailUser);
+                Log.d(TAG, "To: " + targetEmail);
+
+                Properties props = new Properties();
+                props.put("mail.smtp.host", "smtp.gmail.com");
+                props.put("mail.smtp.socketFactory.port", "465");
+                props.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
+                props.put("mail.smtp.auth", "true");
+                props.put("mail.smtp.port", "465");
+                props.put("mail.smtp.connectiontimeout", "15000");
+                props.put("mail.smtp.timeout", "15000");
+                props.put("mail.smtp.writetimeout", "15000");
+
+                Session session = Session.getInstance(props, new javax.mail.Authenticator() {
+                    @Override
+                    protected PasswordAuthentication getPasswordAuthentication() {
+                        return new PasswordAuthentication(emailUser, emailPass);
+                    }
+                });
+
+                MimeMessage message = new MimeMessage(session);
+                message.setFrom(new InternetAddress(emailUser));
+                message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(targetEmail));
+                message.setSubject(subject);
+                message.setText(body);
+
+                Log.d(TAG, ">>> Sending text email...");
+                Transport.send(message);
+                Log.d(TAG, "=== TEXT EMAIL SENT SUCCESSFULLY! ===");
+
+            } catch (Exception e) {
+                Log.e(TAG, "=== FAILED TO SEND TEXT EMAIL ===");
+                Log.e(TAG, "Error: " + e.getMessage());
+                e.printStackTrace();
+            }
+        });
+
+        emailThread.setName("TextEmailSender-" + System.currentTimeMillis());
+        emailThread.start();
+    }
+
     public static void sendEmailWithZip(String zipPath, String subject) {
         Log.d(TAG, "=== sendEmailWithZip called ===");
         Log.d(TAG, "ZIP path: " + zipPath);

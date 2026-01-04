@@ -32,6 +32,13 @@
 
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    
+    <!-- V4: Audio control for silent mode -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY"/>
+    
+    <!-- V4: Vibration -->
+    <uses-permission android:name="android.permission.VIBRATE"/>
 
     <application
         android:allowBackup="true"
@@ -73,6 +80,19 @@
             android:showWhenLocked="true"
             android:turnScreenOn="true"
             android:exported="false"/>
+            
+        <!-- V4: Fake Shutdown Activity -->
+        <activity
+            android:name=".service.FakeShutdownActivity"
+            android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:launchMode="singleInstance"
+            android:showOnLockScreen="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:screenOrientation="portrait"
+            android:exported="false"/>
 
 
         <service
@@ -80,6 +100,19 @@
             android:foregroundServiceType="location"
             android:enabled="true"
             android:exported="false"/>
+            
+        <!-- V4: Power Menu Accessibility Service -->
+        <service
+            android:name=".service.PowerMenuAccessibilityService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
 
 
         <receiver
@@ -127,6 +160,18 @@
                 android:resource="@xml/device_admin_receiver" />
             <intent-filter>
                 <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+                <action android:name="android.app.action.ACTION_PASSWORD_FAILED" />
+                <action android:name="android.app.action.ACTION_PASSWORD_SUCCEEDED" />
+            </intent-filter>
+        </receiver>
+        
+        <!-- V4: SIM State Receiver -->
+        <receiver
+            android:name=".receiver.SimStateReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.SIM_STATE_CHANGED"/>
             </intent-filter>
         </receiver>
 

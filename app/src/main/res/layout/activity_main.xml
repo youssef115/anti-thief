@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
+    android:layout_height="match_parent">
+
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
     android:orientation="vertical"
     android:padding="24dp"
     android:gravity="center">
@@ -50,6 +54,22 @@
         android:layout_height="wrap_content"
         android:text="Lock Screen Protection: OFF"
         android:layout_marginBottom="16dp"/>
+        
+    <!-- V4: Accessibility Service Button -->
+    <Button
+        android:id="@+id/accessibilityButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Enable Power Menu Protection"
+        android:layout_marginBottom="16dp"/>
+        
+    <!-- V4: PIN Shutdown Guide Button -->
+    <Button
+        android:id="@+id/pinShutdownButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Setup PIN-Protected Shutdown"
+        android:layout_marginBottom="16dp"/>
 
     <Button
         android:id="@+id/startButton"
@@ -68,9 +88,10 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="This app runs in the background to:\n• Track location every minute\n• Take photos when screen is turned on\n• Send data to your server"
+        android:text="This app runs in the background to:\n- Track location every minute\n- Take photos when screen is turned on\n- Detect shutdown attempts\n- Detect SIM card removal\n- Detect wrong password attempts\n- Send data to your email"
         android:textSize="14sp"
         android:layout_marginTop="32dp"
         android:alpha="0.7"/>
 
 </LinearLayout>
+</ScrollView>
